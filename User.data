@@ -1,0 +1,18 @@
+# User Data File
+# Add your data here then change Custombot.py to refer to this file
+
+# Twitch Bot Username
+bot_username
+
+# Twitch Channel Username
+channel_username
+
+# Twitch OAuth Secret
+oauth_secret
+
+# Twitch Client ID
+client_id
+
+# Comma-separated list of OBS IP addresses
+# You should be able to copy this directly from streamlabs OBS
+ip, ip, ip 
