@@ -4,6 +4,8 @@ import json
 import os
 import requests
 import websocket
+import asyncio
+import websockets
 
 from irc.bot import SingleServerIRCBot
 
@@ -13,17 +15,34 @@ class CustomBot(SingleServerIRCBot):
         self.channel_username = None
         self.oauth_token = None
         self.client_id = None
-        
         self.user_obs_port = 59650
         self.user_obs_ips = []
-
-        self.ws = None
-        self.widgets = []  # List to hold loaded widgets
-        self.commands = []  # List to hold loaded commands
+        self.ws_server = None  # WebSocket server
 
         # Initialize the IRC bot
         super().__init__([], "", "")  # We'll set these values later
 
+        # Load data and components
+        self.load_data_and_components("Kat.data")
+
+    async def start_websocket_server(self):
+        # Define WebSocket server logic
+        async def server(websocket, path):
+            async for message in websocket:
+                # Handle incoming WebSocket messages
+                print(f"Received WebSocket message: {message}")
+                # Add your custom WebSocket logic here
+
+        # Start the WebSocket server
+        self.ws_server = await websockets.serve(server, "localhost", 8765)
+
+        # Initialize the IRC bot
+        super().__init__([], "", "")  # We'll set these values later
+          
+        # Start the WebSocket server
+        self.start_websocket_server()
+        
+        # Load data and components
         self.load_data_and_components("Kat.data")
 
     def load_data_and_components(self, filename):
@@ -85,6 +104,23 @@ class CustomBot(SingleServerIRCBot):
             command_instance = getattr(command_module, module_name)(self)
             self.commands.append(command_instance)
 
+    def start_websocket_server(self):
+        # Define WebSocket server logic
+        async def server(websocket, path):
+            async for message in websocket:
+                # Handle incoming WebSocket messages
+                print(f"Received WebSocket message: {message}")
+                # Add your custom WebSocket logic here
+
+        # Start the WebSocket server
+        self.ws_server = websockets.serve(server, "localhost", self.user_obs_port)
+
+        async def run_server():
+            async with self.ws_server:
+                await self.ws_server.serve_forever()
+
+        asyncio.get_event_loop().run_until_complete(run_server())
+
     def connect_to_obs(self):
         for ip in self.user_obs_ips:
             try:
@@ -143,6 +179,8 @@ class CustomBot(SingleServerIRCBot):
 
         # Start the IRC bot
         self.start()
+        
+        asyncio.get_event_loop().run_until_complete(self.start_websocket_server())
 
     def update(self):
         for widget in self.widgets:
@@ -154,6 +192,11 @@ class CustomBot(SingleServerIRCBot):
         self.ws.close()
         for widget in self.widgets:
             widget.stop()
+            
+        if self.ws_server:
+            self.ws_server.close()
+            asyncio.get_event_loop().run_until_complete(self.ws_server.wait_closed())            
+
         print("Disconnected from Streamlabs OBS WebSocket")
 
 # Actual Execution
