@@ -50,7 +50,7 @@ class CustomBot(SingleServerIRCBot):
         data = {
             "bot_username": self.bot_username,
             "channel_username": self.channel_username,
-            "irc_clients": self.irc_clients,  # Updated data structure
+            "irc_clients": self.irc_clients,
             "user_obs_ips": self.user_obs_ips
         }
 
@@ -66,7 +66,6 @@ class CustomBot(SingleServerIRCBot):
                 self.bot_username = data.get("bot_username")
                 self.channel_username = data.get("channel_username")
                 
-                # Updated data structure
                 self.irc_clients = data.get("irc_clients", [])
                 
                 self.user_obs_ips = data.get("user_obs_ips", [])
@@ -91,15 +90,15 @@ class CustomBot(SingleServerIRCBot):
             client["name"] = input("Enter the client name: ")
             client["id"] = input("Enter the client ID: ")
             client["secret"] = input("Enter the client secret: ")
-            client["redirect_uri"] = input("Enter the redirect URI: ")
+            client["oauth_url"] = input("Enter the OAuth URL: ")
             self.irc_clients.append(client)
         
         self.user_obs_ips = input("Enter your OBS IP addresses (separated by commas): ").split(",")
         
         self.save_data()
 
+    # Start the WebSocket server which will handle incoming and outgoing messages
     async def start_websocket_server(self):
-        # Define WebSocket server logic
         async def server(websocket, path):
             try:
                 # Handle incoming WebSocket messages
@@ -110,13 +109,14 @@ class CustomBot(SingleServerIRCBot):
                 # Handle connection closed gracefully
                 pass
 
-        # Start the WebSocket server
+        # Start the server
         server_address = ("localhost", 8765)  # Update with your desired host and port
         self.ws_server = await websockets.serve(server, *server_address)
 
-        # Keep the WebSocket server running
+        # Keep the server running
         await self.ws_server.wait_closed()
 
+    # Connect our bot to OBS
     async def connect_to_obs(self):
         # Connect to OBS WebSocket server
         slobs_ws_url = "ws://localhost:" + self.obs_port
@@ -127,6 +127,7 @@ class CustomBot(SingleServerIRCBot):
             response = await websocket.recv()
             print(f"Streamlabs OBS Version: {response}")
 
+    # Connect our bot to various IRC clients like Twitch chat
     async def connect_to_irc(self):
         # Loop through all IRC clients and prompt the user to connect to them
         for client in self.irc_clients:
@@ -135,11 +136,13 @@ class CustomBot(SingleServerIRCBot):
                 irc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 irc.connect((client["server"], client["port"]))
 
-                # Authenticate with the IRC server using client ID, client secret, and OAuth token
-                irc.send(bytes(f"PASS {client['oauth_token']}\r\n", "UTF-8"))
-                irc.send(bytes("NICK " + self.bot_username + "\r\n", "UTF-8"))
-                irc.send(bytes("USER " + self.bot_username + " " + self.bot_username + " " + self.bot_username + " :" + self.bot_username + "\r\n", "UTF-8"))
+                # Generate an OAuth token for the IRC client
+                oauth = self.generate_oauth(client["id"], client["secret"], client["oauth_url"])
 
+                # Authenticate with the IRC server using client ID, client secret, and OAuth token
+                irc.send(bytes(f"PASS {client[oauth]}\r\n", "UTF-8"))
+                irc.send(bytes("NICK " + self.bot_username + "\r\n", "UTF-8"))
+                
                 # Join the channel
                 irc.send(bytes("JOIN " + client["channel"] + "\r\n", "UTF-8"))
 
@@ -149,6 +152,23 @@ class CustomBot(SingleServerIRCBot):
                     self.update(data)
                     await asyncio.sleep(0.1)  # Sleep for a short duration to avoid busy-waiting
     
+    # Generate an OAuth token for the IRC client
+    def generate_oauth(self, client_id, client_secret, oauth_url):
+        payload = {
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "grant_type": "client_credentials"
+        }
+        
+        response = requests.post(oauth_url, data=payload)
+        
+        if response.status_code == 200:
+            data = response.json()
+            return data.get("access_token")
+        else:
+            print("Failed to obtain OAuth token.")
+            return None
+
     # Load all Widgets in Widgets folder
     def load_widgets(self):
         self.widgets = []
@@ -184,6 +204,7 @@ class CustomBot(SingleServerIRCBot):
             # Execute the command
             self.execute_command(command, args)
 
+    # Main bot execution, though I think most of it is already in __init__
     def main(self):
         # Implement the main bot loop
         pass
