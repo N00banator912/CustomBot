@@ -1,205 +1,193 @@
+#**********************************************************************************************************************
+# Custom Bot Core
+# A simple to use, open source Twitch bot that allows you to create your own custom bot commands and widgets.
+#**********************************************************************************************************************
+# Author:   K. E. Brown
+# Started:  9/17/2023
+# Modified: 9/21/2023
+#**********************************************************************************************************************
+
+# Imports
+from re import S
 import cv2
-import importlib.util
-import json
 import os
-import requests
-import websocket
+import json
 import asyncio
 import websockets
-
+import socket
+import requests
+import time
 from irc.bot import SingleServerIRCBot
+import importlib.util
 
+# Core Class
 class CustomBot(SingleServerIRCBot):
+    # Initialize the bot
     def __init__(self):
-        self.bot_username = None
-        self.channel_username = None
-        self.oauth_token = None
-        self.client_id = None
-        self.user_obs_port = 59650
-        self.user_obs_ips = []
-        self.ws_server = None  # WebSocket server
+        self.get_user()
+        self.load_data()
 
         # Initialize the IRC bot
-        super().__init__([], "", "")  # We'll set these values later
+        super().__init__([(self.channel_username, self.oauth_token)], self.bot_username, self.bot_username)
+        
+        self.obs_port = 4444
 
-        # Load data and components
-        self.load_data_and_components("Kat.data")
+        self.start_websocket_server()
+        self.connect_to_obs()
+        self.connect_to_twitch()
+        self.load_widgets()
+        self.load_commands()
+
+
+    # Prompt the user for their CustomBot username
+    def get_user(self):
+        self.local_username = input("Enter your CustomBot username: ")
+        
+
+    # Save the user's data to a .data file
+    def save_data(self):
+        # Save user data to .data file
+        data = {
+            "bot_username": self.bot_username,
+            "channel_username": self.channel_username,
+            "irc_clients": self.irc_clients,  # Updated data structure
+            "user_obs_ips": self.user_obs_ips
+        }
+
+        with open(self.local_username + ".data", "w") as f:
+            json.dump(data, f)
+            
+    # Load the user's data
+    def load_data(self):
+        # if the user already has a .data file, load it
+        if os.path.exists(self.local_username + ".data"):
+            with open(self.local_username + ".data", "r") as f:
+                data = json.load(f)
+                self.bot_username = data.get("bot_username")
+                self.channel_username = data.get("channel_username")
+                
+                # Updated data structure
+                self.irc_clients = data.get("irc_clients", [])
+                
+                self.user_obs_ips = data.get("user_obs_ips", [])
+        
+        # otherwise, prompt the user for their information
+        else:
+            self.prompt_user_for_data()
+           
+        self.oauth_token = self.generate_oauth()
+
+    def prompt_user_for_data(self):
+        # Implement logic to prompt the user for their information and save it to a .data file
+        self.bot_username = input("Enter your bot username: ")
+        self.channel_username = input("Enter your channel username: ")
+        
+        # Prompt the user for all IRC clients they want to connect to
+        # These should be stored as a list of ID, Secret, and Redirect URIs with a string for the user's client identifier (i.e. its name; "Twitch", "TikTok", etc)
+        self.irc_clients = []
+        
+        while input("Add an IRC client? (y/n): ").lower() != "n":
+            client = {}
+            client["name"] = input("Enter the client name: ")
+            client["id"] = input("Enter the client ID: ")
+            client["secret"] = input("Enter the client secret: ")
+            client["redirect_uri"] = input("Enter the redirect URI: ")
+            self.irc_clients.append(client)
+        
+        self.user_obs_ips = input("Enter your OBS IP addresses (separated by commas): ").split(",")
+        
+        self.save_data()
 
     async def start_websocket_server(self):
         # Define WebSocket server logic
         async def server(websocket, path):
-            async for message in websocket:
-                # Handle incoming WebSocket messages
-                print(f"Received WebSocket message: {message}")
-                # Add your custom WebSocket logic here
-
-        # Start the WebSocket server
-        self.ws_server = await websockets.serve(server, "localhost", 8765)
-
-        # Initialize the IRC bot
-        super().__init__([], "", "")  # We'll set these values later
-          
-        # Start the WebSocket server
-        self.start_websocket_server()
-        
-        # Load data and components
-        self.load_data_and_components("Kat.data")
-
-    def load_data_and_components(self, filename):
-        with open(filename, "r") as f:
-            lines = f.read().splitlines()
-
-        if len(lines) >= 4:
-            self.bot_username = lines[0]
-            self.channel_username = lines[1]
-            self.oauth_token = self.generate_oauth_token(lines[2], lines[3])
-            self.client_id = lines[3]
-            self.user_obs_ips = lines[4].split(',')
-        else:
-            print("Error: Kat.data file does not contain sufficient data.")
-
-        # Initialize the IRC bot with the OAuth token and channel
-        super().__init__([(self.channel_username, self.oauth_token)], self.bot_username, self.bot_username)
-
-        self.load_widgets()
-        self.load_commands()
-
-    def generate_oauth_token(self, client_id, client_secret):
-        token_url = f"https://id.twitch.tv/oauth2/token?client_id={client_id}&client_secret={client_secret}&grant_type=client_credentials"
-        response = requests.post(token_url)
-        if response.status_code == 200:
-            response_data = response.json()
-            return response_data.get("access_token")
-        else:
-            print("Error generating OAuth token")
-            return None
-
-    def load_widgets(self):
-        widget_folder = "Widgets"
-        widget_files = [f for f in os.listdir(widget_folder) if f.endswith(".py")]
-
-        for widget_file in widget_files:
-            module_name = os.path.splitext(widget_file)[0]
-            spec = importlib.util.spec_from_file_location(module_name, os.path.join(widget_folder, widget_file))
-            widget_module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(widget_module)
-
-            widget_instance = getattr(widget_module, module_name)()
-            self.widgets.append(widget_instance)
-
-            if hasattr(widget_module, "commands"):
-                self.commands.extend(widget_module.commands)
-
-    def load_commands(self):
-        command_folder = "Commands"
-        command_files = [f for f in os.listdir(command_folder) if f.endswith(".py")]
-
-        for command_file in command_files:
-            module_name = os.path.splitext(command_file)[0]
-            spec = importlib.util.spec_from_file_location(module_name, os.path.join(command_folder, command_file))
-            command_module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(command_module)
-
-            # Create an instance of the command class and append it to the commands list
-            command_instance = getattr(command_module, module_name)(self)
-            self.commands.append(command_instance)
-
-    def start_websocket_server(self):
-        # Define WebSocket server logic
-        async def server(websocket, path):
-            async for message in websocket:
-                # Handle incoming WebSocket messages
-                print(f"Received WebSocket message: {message}")
-                # Add your custom WebSocket logic here
-
-        # Start the WebSocket server
-        self.ws_server = websockets.serve(server, "localhost", self.user_obs_port)
-
-        async def run_server():
-            async with self.ws_server:
-                await self.ws_server.serve_forever()
-
-        asyncio.get_event_loop().run_until_complete(run_server())
-
-    def connect_to_obs(self):
-        for ip in self.user_obs_ips:
             try:
-                obs_ws_url = f"ws://{ip}:{self.user_obs_port}/api"
-                self.ws = websocket.create_connection(obs_ws_url)
-                print("Connected to Streamlabs OBS WebSocket")
-                break
-            except Exception as e:
-                print(f"Error connecting to {ip}: {e}")
+                # Handle incoming WebSocket messages
+                async for message in websocket:
+                    print(f"Received WebSocket message: {message}")
+                    # Add your custom WebSocket logic here
+            except websockets.exceptions.ConnectionClosedError:
+                # Handle connection closed gracefully
+                pass
 
-    def on_welcome(self, connection, event):
-        connection.join(self.channel)
+        # Start the WebSocket server
+        server_address = ("localhost", 8765)  # Update with your desired host and port
+        self.ws_server = await websockets.serve(server, *server_address)
 
-    def on_pubmsg(self, connection, event):
-        message = event.arguments[0]
-        username = event.source.split('!')[0]
+        # Keep the WebSocket server running
+        await self.ws_server.wait_closed()
 
-        # Check if the message is a command
-        if message.startswith('!'):
-            self.handle_command(username, message[1:])
+    async def connect_to_obs(self):
+        # Connect to OBS WebSocket server
+        slobs_ws_url = "ws://localhost:" + self.obs_port
+    
+        async with websockets.connect(slobs_ws_url) as websocket:
+            # Send and receive WebSocket messages to control Streamlabs OBS
+            await websocket.send('{"request-type": "GetVersion"}')
+            response = await websocket.recv()
+            print(f"Streamlabs OBS Version: {response}")
 
-    def handle_command(self, username, command):
-        # Check if the command is within the list of loaded commands
-        command_name = command.split(" ")[0].lower()
-        for cmd in self.commands:
-            if cmd.name_abbrv.lower() == command_name:
-                cmd.execute(username, command)
-                break
+    async def connect_to_irc(self):
+        # Loop through all IRC clients and prompt the user to connect to them
+        for client in self.irc_clients:
+            if input(f"Connect to {client['name']}? (y/n): ").lower() == "y":
+                # Connect to the IRC client asynchronously
+                irc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                irc.connect((client["server"], client["port"]))
 
-    def switch_scene(self, scene_name):
-        # Implement logic to switch scenes here
-        # For example:
-        message = {
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "SetCurrentScene",
-            "params": {
-                "scene-name": scene_name
-            }
-        }
-        self.ws.send(json.dumps(message))
+                # Authenticate with the IRC server using client ID, client secret, and OAuth token
+                irc.send(bytes(f"PASS {client['oauth_token']}\r\n", "UTF-8"))
+                irc.send(bytes("NICK " + self.bot_username + "\r\n", "UTF-8"))
+                irc.send(bytes("USER " + self.bot_username + " " + self.bot_username + " " + self.bot_username + " :" + self.bot_username + "\r\n", "UTF-8"))
+
+                # Join the channel
+                irc.send(bytes("JOIN " + client["channel"] + "\r\n", "UTF-8"))
+
+                # Keep the IRC connection running asynchronously (you can add your message handling logic here)
+                while True:
+                    data = irc.recv(2048).decode("UTF-8")
+                    self.update(data)
+                    await asyncio.sleep(0.1)  # Sleep for a short duration to avoid busy-waiting
+    
+    # Load all Widgets in Widgets folder
+    def load_widgets(self):
+        self.widgets = []
+        
+        for file in os.listdir("Widgets"):
+            if file.endswith(".py"):
+                widget = importlib.import_module("Widgets." + file[:-3])
+                self.widgets.append(widget)
+                
+    # Load all Commands in Commands folder
+    def load_commands(self):
+        self.commands = []
+        
+        for file in os.listdir("Commands"):
+            if file.endswith(".py"):
+                command = importlib.import_module("Commands." + file[:-3])
+                self.commands.append(command)
+             
+        for widget in self.widgets:
+            self.commands.append(widget.commands)
+
+    # Process incoming messages
+    async def update(self, message):
+        # Implement your asynchronous logic here
+        print(f"Received message: {message}")
+        
+        # if the message is a command, execute it
+        if message.startswith("!"):
+            # Parse the message
+            command = message.split(" ")[0]
+            args = message.split(" ")[1:]
+   
+            # Execute the command
+            self.execute_command(command, args)
 
     def main(self):
-        # Connect to Streamlabs OBS WebSocket
-        self.connect_to_obs()
-        if not self.ws:
-            return
+        # Implement the main bot loop
+        pass
 
-        # Initialize widgets
-        for widget in self.widgets:
-            widget.init()
-
-        # Start widgets
-        for widget in self.widgets:
-            widget.start()
-
-        # Start the IRC bot
-        self.start()
-        
-        asyncio.get_event_loop().run_until_complete(self.start_websocket_server())
-
-    def update(self):
-        for widget in self.widgets:
-            widget.update()
-
-    def shutdown(self):
-        # Release resources
-        cv2.destroyAllWindows()
-        self.ws.close()
-        for widget in self.widgets:
-            widget.stop()
-            
-        if self.ws_server:
-            self.ws_server.close()
-            asyncio.get_event_loop().run_until_complete(self.ws_server.wait_closed())            
-
-        print("Disconnected from Streamlabs OBS WebSocket")
-
-# Actual Execution
 if __name__ == "__main__":
     bot = CustomBot()
     bot.main()
