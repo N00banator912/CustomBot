@@ -1,3 +1,12 @@
+# *********************************************************************
+# Command Base Class
+# A basic command for new commands to inherit from
+# *********************************************************************
+# Author: K. E. Brown
+# Started: 9/21/2023
+# Modified: 9/23/2023
+# *********************************************************************
+
 class Command:
     def __init__(self, bot):
         self.bot = bot

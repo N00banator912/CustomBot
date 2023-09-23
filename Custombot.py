@@ -4,7 +4,7 @@
 #**********************************************************************************************************************
 # Author:   K. E. Brown
 # Started:  9/17/2023
-# Modified: 9/21/2023
+# Modified: 9/23/2023
 #**********************************************************************************************************************
 
 # Imports
@@ -76,6 +76,7 @@ class CustomBot(SingleServerIRCBot):
            
         self.oauth_token = self.generate_oauth()
 
+    # Ask new users for their information
     def prompt_user_for_data(self):
         # Implement logic to prompt the user for their information and save it to a .data file
         self.bot_username = input("Enter your bot username: ")
@@ -203,6 +204,34 @@ class CustomBot(SingleServerIRCBot):
    
             # Execute the command
             self.execute_command(command, args)
+        
+        # define temp for below loop
+        temp = None
+
+        # update all widgets
+        for widget in self.widgets:
+            temp = widget.update()
+            if (temp != None):
+                self.process_packet(temp)
+
+    # Tells the target command to execute
+    def execute_command(self, command, args):
+        # find the command in the list of commands
+        temp = None
+        
+        for command in self.commands:
+            if command.name == command:
+                # execute the command
+                temp = command.execute(args)
+                if (temp != None):
+                    self.process_packet(temp)
+                return
+            
+    # Process a Response Packet
+    # Returns True if the packet was processed successfully
+    def process_packet(self, packet):
+        pass
+    
 
     # Main bot execution, though I think most of it is already in __init__
     def main(self):
