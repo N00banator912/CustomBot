@@ -4,7 +4,7 @@
 # *********************************************************************
 # Author: K. E. Brown
 # Started: 9/21/2023
-# Modified: 9/23/2023
+# Modified: 9/27/2023
 # *********************************************************************
 
 class Command:
@@ -13,6 +13,7 @@ class Command:
         self.name = "Command"
         self.desc = "A command"
         self.name_abbrv = "CMD"
+        self.matches = []
 
     def execute(self, username, args):
         # Implement command logic here

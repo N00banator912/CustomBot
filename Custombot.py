@@ -4,7 +4,7 @@
 #**********************************************************************************************************************
 # Author:   K. E. Brown
 # Started:  9/17/2023
-# Modified: 9/23/2023
+# Modified: 9/27/2023
 #**********************************************************************************************************************
 
 # Imports
@@ -191,6 +191,13 @@ class CustomBot(SingleServerIRCBot):
         for widget in self.widgets:
             self.commands.append(widget.commands)
 
+    # Find a widget by name
+    def get_widget(self, name):
+        for widget in self.widgets:
+            if widget.name == name:
+                return widget
+        return None
+
     # Process incoming messages
     async def update(self, message):
         # Implement your asynchronous logic here
@@ -202,8 +209,20 @@ class CustomBot(SingleServerIRCBot):
             command = message.split(" ")[0]
             args = message.split(" ")[1:]
    
+            # Find the relevant command
+            command = None
+            for Command in self.commands:
+                if Command.matches.contains(command):
+                    command = Command
+                    break
+                
             # Execute the command
-            self.execute_command(command, args)
+            if command != None:
+                command.execute(args)
+            else:
+                print("Command not found.")  
+                self.send_message("Command " + command + " not found.")
+    
         
         # define temp for below loop
         temp = None
@@ -232,6 +251,11 @@ class CustomBot(SingleServerIRCBot):
     def process_packet(self, packet):
         pass
     
+    # Send a message to any connected IRC clients
+    def send_message(self, message):
+        for irc in self.irc_clients:
+            irc.send(bytes("PRIVMSG " + self.channel_username + " :" + message + "\r\n", "UTF-8"))
+              
 
     # Main bot execution, though I think most of it is already in __init__
     def main(self):

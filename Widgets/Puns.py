@@ -5,14 +5,14 @@
 # ******************************************************************************************************
 # Author: K. E. Brown
 # Started: 9/23/2023
-# Modified: 9/23/2023
+# Modified: 9/27/2023
 # ******************************************************************************************************
 
 import random
 import os
 
 from Widget import Widget
-from Command import Command
+from Commands.Command import Command
 
 class PunsWidget(Widget):
     def __init__(self, ws, scene_name):
@@ -46,8 +46,13 @@ class PunsCommand(Command):
         super().__init__(bot)
         self.name = "Pun"
         self.desc = "Get a random pun"
-
+        # Set parent to PunsWidget
+        self.parent = bot.get_widget("Puns")
+        
     def execute(self, username, args):
         # Execute command logic here
-        puns_widget = self.bot.get_widget_by_name("Puns")  # Assuming you have a method to get the widget by name
-        puns_widget.send_random_pun()
+        # Print to irc channels
+
+        # Set a new Random Pun
+
+

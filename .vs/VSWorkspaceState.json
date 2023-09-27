@@ -1,7 +1,10 @@
 {
   "ExpandedNodes": [
-    ""
+    "",
+    "\\Commands",
+    "\\Data",
+    "\\Widgets"
   ],
-  "SelectedNode": "\\Custombot.py",
+  "SelectedNode": "\\Widgets\\Puns.py",
   "PreviewInSolutionExplorer": false
 }
